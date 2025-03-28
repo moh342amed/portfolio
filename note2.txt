@@ -1,0 +1,439 @@
+<?php
+session_start();
+
+// Authentication check
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'administration') {
+    header("Location: ../login.html");
+    exit;
+}
+
+// Database connection
+$conn = new mysqli("localhost", "root", "", "attendance_management");
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// Helper function to get profile picture path
+function getProfilePicturePath($picture, $default = 'default-profile.png') {
+    return !empty($picture) 
+        ? "./uploads/profile_pictures/" . $picture 
+        : "./uploads/profile_pictures/" . $default;
+}
+
+// Get admin information
+$user_id = $_SESSION['user_id'];
+$user_name = $_SESSION['name'] ?? 'Admin User';
+
+// Fetch admin profile picture
+$admin_query = $conn->prepare("SELECT profile_picture FROM users WHERE id = ?");
+$admin_query->bind_param("i", $user_id);
+$admin_query->execute();
+$admin_data = $admin_query->get_result()->fetch_assoc();
+$profile_picture_path = getProfilePicturePath($admin_data['profile_picture']);
+
+// Search and filter parameters
+$search_query = $_GET['search'] ?? '';
+$department_filter = $_GET['department'] ?? '';
+
+// Build employee query
+$sql = "SELECT id, name, username, email, department, role, profile_picture 
+        FROM users WHERE role = 'employee'";
+
+$params = [];
+$param_types = '';
+
+// Add search conditions
+if (!empty($search_query)) {
+    $search_query = "%{$search_query}%";
+    $sql .= " AND (name LIKE ? OR id LIKE ? OR department LIKE ? OR role LIKE ?)";
+    $params = array_merge($params, [$search_query, $search_query, $search_query, $search_query]);
+    $param_types .= 'ssss';
+}
+
+// Add department filter
+if (!empty($department_filter)) {
+    $sql .= " AND department = ?";
+    $params[] = $department_filter;
+    $param_types .= 's';
+}
+
+// Prepare and execute query
+$stmt = $conn->prepare($sql);
+if (!empty($params)) {
+    $stmt->bind_param($param_types, ...$params);
+}
+$stmt->execute();
+$result = $stmt->get_result();
+$employees = $result->fetch_all(MYSQLI_ASSOC);
+
+// Get unique departments
+$departments = $conn->query("SELECT DISTINCT department FROM users WHERE department IS NOT NULL AND department != ''")
+    ->fetch_all(MYSQLI_ASSOC);
+$departments = array_column($departments, 'department');
+
+$conn->close();
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employee Directory | Attendance System</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    /* CSS Variables for consistent theming */
+  </style>
+</head>
+<body>
+    <header>
+        <div class="logo">AttendX</div>
+        <div class="app-title">Employee Directory</div>
+        <div class="user-profile" id="userProfileBtn">
+            <img src="<?= htmlspecialchars($profile_picture_path) ?>" alt="<?= htmlspecialchars($user_name) ?>">
+            <span><?= htmlspecialchars($user_name) ?></span>
+            <i class="fas fa-chevron-down" style="margin-left: 10px;"></i>
+        </div>
+        <div class="user-dropdown" id="userDropdown">
+            <ul>
+                <li><a href="./MyProfile.php"><i class="fas fa-user-circle"></i> My Profile</a></li>
+                <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+            </ul>
+        </div>
+    </header>
+    
+    <div class="layout">
+        <aside class="sidebar" id="sidebar">
+            <button class="toggle-btn" id="toggleSidebar">
+                <i class="fas fa-bars"></i>
+            </button>
+            <ul>
+                <li><a href="./EmployeeDirectoryPage.php" class="active"><i class="fas fa-users"></i> <span>Employee Directory</span></a></li>
+                <li><a href="./AdminLeaveRequestManagementPage.php"><i class="fas fa-calendar-alt"></i> <span>Leave Requests</span></a></li>
+                <li><a href="./AttendanceModificationManagementPage.php"><i class="fas fa-clock"></i> <span>Attendance Modification</span></a></li>
+                <li><a href="./PenaltyManagementPage.php"><i class="fas fa-exclamation-triangle"></i> <span>Penalty Management</span></a></li>
+                <li><a href="./ReportsGenerationPage.php"><i class="fas fa-chart-bar"></i> <span>Reports</span></a></li>
+            </ul>
+        </aside>
+        
+        <main class="main-content">
+            <div class="page-title">
+                <h1>Employee Directory</h1>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">Employee Search</div>
+                <div class="card-body">
+                    <form action="EmployeeDirectoryPage.php" method="GET" class="search-form">
+                        <div class="search-container">
+                            <input type="text" name="search" placeholder="Search by name, ID, position..." 
+                                   value="<?= htmlspecialchars($search_query) ?>">
+                            <button type="submit" class="btn">Search</button>
+                        </div>
+                        <div class="form-group">
+                            <label>Department Filter</label>
+                            <select name="department" onchange="this.form.submit()">
+                                <option value="">All Departments</option>
+                                <?php foreach ($departments as $dept): ?>
+                                    <option value="<?= htmlspecialchars($dept) ?>" 
+                                        <?= $department_filter == $dept ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($dept) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    Employee List
+                    <button class="btn btn-secondary" id="addEmployeeBtn">
+                        <i class="fas fa-plus"></i> Add New Employee
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="employee-list">
+                        <?php if (empty($employees)): ?>
+                            <div class="no-results">
+                                <p>No employees found. Try adjusting your search criteria.</p>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach ($employees as $employee): 
+                                $emp_profile_path = getProfilePicturePath($employee['profile_picture']); 
+                            ?>
+                                <div class="employee-card">
+                                    <div class="employee-avatar">
+                                        <img src="<?= htmlspecialchars($emp_profile_path) ?>" 
+                                             alt="<?= htmlspecialchars($employee['name']) ?>"
+                                             onerror="this.src='./projectweb/Employee/profile_pictures/default-profile.png'">
+                                    </div>
+                                    <div class="employee-info">
+                                        <div class="employee-name"><?= htmlspecialchars($employee['name']) ?></div>
+                                        <div class="employee-position">
+                                            <?= !empty($employee['role']) ? htmlspecialchars(ucfirst($employee['role'])) : 'Employee' ?> - 
+                                            <?= !empty($employee['department']) ? htmlspecialchars($employee['department']) : 'Unassigned' ?>
+                                        </div>
+                                        <div class="employee-id">ID: EMP<?= str_pad($employee['id'], 3, '0', STR_PAD_LEFT) ?></div>
+                                    </div>
+                                    <div class="employee-actions">
+                                        <a href="ViewEmployeeProfile.php?id=<?= $employee['id'] ?>" class="btn">View Profile</a>
+                                        <a href="EditEmployee.php?id=<?= $employee['id'] ?>" class="btn btn-secondary">Edit</a>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <?php if (count($employees) >= 10): ?>
+                    <div class="text-center mt-20">
+                        <button class="btn" id="loadMoreBtn">Load More</button>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Employee Modal (Kept the same as previous code) -->
+    <div id="addEmployeeModal" class="modal">
+        <!-- Modal content remains the same as in the previous code -->
+    </div>
+  
+  <script>
+    // Toggle sidebar
+    document.getElementById('toggleSidebar').addEventListener('click', function() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+      document.querySelector('.main-content').style.marginLeft = 
+        document.getElementById('sidebar').classList.contains('collapsed') ? 
+        'var(--sidebar-collapsed)' : 'var(--sidebar-width)';
+    });
+    
+    // User dropdown
+    document.getElementById('userProfileBtn').addEventListener('click', function() {
+      document.getElementById('userDropdown').classList.toggle('show');
+    });
+    
+    // Close dropdown when clicking outside
+    window.addEventListener('click', function(event) {
+      if (!event.target.matches('#userProfileBtn') && 
+          !event.target.closest('#userProfileBtn') && 
+          !event.target.matches('#userDropdown') && 
+          !event.target.closest('#userDropdown')) {
+        document.getElementById('userDropdown').classList.remove('show');
+      }
+    });
+    
+    // Mobile menu toggle
+    document.addEventListener('DOMContentLoaded', function() {
+      const modal = document.getElementById('addEmployeeModal');
+      const btn = document.getElementById('addEmployeeBtn');
+      const span = document.getElementsByClassName('close')[0];
+      const cancelBtn = document.getElementById('cancelAddEmployee');
+      
+      // Ensure modal is hidden by default
+      modal.style.display = 'none';
+      
+      // Department dropdown handler
+      const departmentSelect = document.getElementById('department');
+      const newDepartmentGroup = document.getElementById('newDepartmentGroup');
+      
+      departmentSelect.addEventListener('change', function() {
+          if (this.value === 'other') {
+              newDepartmentGroup.classList.remove('hidden');
+          } else {
+              newDepartmentGroup.classList.add('hidden');
+          }
+      });
+      
+      // Modal handlers
+      btn.onclick = function() {
+          modal.style.display = 'block';
+          
+          // Smoothly scroll to the modal
+          modal.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      
+      span.onclick = function() {
+          modal.style.display = 'none';
+      }
+      
+      cancelBtn.onclick = function() {
+          modal.style.display = 'none';
+      }
+      
+      window.onclick = function(event) {
+          if (event.target === modal) {
+              modal.style.display = 'none';
+          }
+      }
+      
+      // Form validation
+      document.getElementById('addEmployeeForm').addEventListener('submit', function(e) {
+          const username = document.getElementById('username').value;
+          const email = document.getElementById('email').value;
+          const password = document.getElementById('password').value;
+          
+          // Basic validation
+          if (password.length < 6) {
+              alert('Password must be at least 6 characters long');
+              e.preventDefault();
+              return false;
+          }
+          
+          // If "other" is selected in department, check that new department is filled
+          if (departmentSelect.value === 'other' && document.getElementById('newDepartment').value.trim() === '') {
+              alert('Please enter a new department name');
+              e.preventDefault();
+              return false;
+          }
+      });
+  });
+    
+    // Load more functionality - placeholder for pagination
+    if (document.getElementById('loadMoreBtn')) {
+      document.getElementById('loadMoreBtn').addEventListener('click', function() {
+        // This would typically make an AJAX call to load more employees
+        alert('This functionality would load more employees with pagination');
+      });
+    }
+  </script>
+</body>
+</html>
+
+And this is all Database tables in phpmyadmin that i have :
+
+DESCRIBE attendance_modifications;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+modification_date	date	NO		NULL		
+modification_type	varchar(50)	NO		NULL		
+modification_time	time	YES		NULL		
+reason	text	NO		NULL		
+status	enum('pending','approved','rejected')	NO		pending		
+admin_comment	text	YES		NULL		
+created_at	datetime	NO		NULL		
+updated_at	datetime	YES		NULL		
+
+DESCRIBE leaves;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+start_date	date	NO		NULL		
+end_date	date	NO		NULL		
+leave_type	varchar(50)	NO		NULL		
+reason	text	NO		NULL		
+status	enum('pending','approved','rejected')	NO		pending		
+admin_comment	text	YES		NULL		
+created_at	datetime	NO		NULL		
+updated_at	datetime	YES		NULL		
+
+DESCRIBE leave_requests;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+leave_type	varchar(50)	NO		NULL		
+start_date	date	NO		NULL		
+end_date	date	NO		NULL		
+days	int(11)	NO		NULL		
+reason	text	YES		NULL		
+status	varchar(20)	NO		pending		
+submitted_at	datetime	NO		current_timestamp()		
+attachment	varchar(255)	YES		NULL		
+approved_by	int(11)	YES		NULL		
+approved_at	datetime	YES		NULL		
+team_lead_approval	varchar(20)	YES		pending		
+department_head_approval	varchar(20)	YES		pending		
+admin_comment	text	YES		NULL		
+	
+DESCRIBE notifications;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+title	varchar(255)	NO		NULL		
+message	text	NO		NULL		
+created_at	datetime	NO		NULL		
+read	tinyint(1)	NO		0		
+time_ago	varchar(50)	YES		NULL	VIRTUAL GENERATED	
+
+
+DESCRIBE users;
+id	int(11)	NO	PRI	NULL	auto_increment	
+name	varchar(255)	NO		NULL		
+username	varchar(255)	NO	UNI	NULL		
+email	varchar(255)	NO	UNI	NULL		
+phone	varchar(20)	YES		NULL		
+password	varchar(255)	NO		NULL		
+role	varchar(50)	NO		NULL		
+address	text	YES		NULL		
+emergency_contact	text	YES		NULL		
+department	text	YES		NULL		
+manager	text	YES		NULL		
+join_date	date	YES		NULL		
+today_status	text	YES		NULL		
+present_this_month	int(11)	YES		NULL		
+leave_balance	int(11)	YES		NULL		
+late_arrivals	int(11)	YES		NULL		
+recent_attendance	text	YES		NULL		
+present_days	int(11)	YES		NULL		
+absent_days	int(11)	YES		NULL		
+annual_leave_balance	int(11)	YES		20		
+sick_leave_balance	int(11)	YES		10		
+personal_leave_balance	int(11)	YES		5		
+unpaid_leave_balance	int(11)	YES		365		
+profile_picture	varchar(255)	YES		default-profile.png		
+
+DESCRIBE users_attendance;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+clock_in	datetime	NO		NULL		
+clock_out	datetime	YES		NULL	
+
+DESCRIBE reports;
+id	int(11)	NO	PRI	NULL	auto_increment	
+title	varchar(255)	NO		NULL		
+department	varchar(255)	NO		NULL		
+generated_by	int(11)	NO	MUL	NULL		
+generated_date	datetime	NO		NULL		
+priority	enum('low','medium','high')	NO		medium		
+status	enum('pending','signed','archived')	NO		pending		
+signed_date	datetime	YES		NULL		
+signed_by	int(11)	YES	MUL	NULL		
+comments	text	YES		NULL		
+attachment	varchar(255)	YES		NULL		
+created_at	datetime	NO		current_timestamp()		
+updated_at	datetime	YES		NULL	on update current_timestamp()	
+
+DESCRIBE penalties;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+penalty_type	varchar(50)	NO		NULL		
+incident_date	date	NO		NULL		
+issue_date	date	NO		NULL		
+severity	enum('low','medium','high')	NO		NULL		
+description	text	NO		NULL		
+penalty_action	varchar(50)	NO		NULL		
+status	enum('active','resolved','revoked')	NO		active		
+documents	varchar(255)	YES		NULL		
+notify_employee	tinyint(1)	NO		0		
+notify_manager	tinyint(1)	NO		0		
+created_by	int(11)	NO	MUL	NULL		
+resolved_by	int(11)	YES	MUL	NULL		
+resolved_date	date	YES		NULL		
+created_at	datetime	NO		current_timestamp()		
+updated_at	datetime	YES		NULL	on update current_timestamp()	
+
+DESCRIBE scheduled_reports;
+id	int(11)	NO	PRI	NULL	auto_increment	
+name	varchar(255)	NO		NULL		
+report_type	varchar(50)	NO		NULL		
+recipients	text	NO		NULL		
+schedule	varchar(20)	NO		NULL		
+last_run	datetime	YES		NULL		
+next_run	datetime	YES		NULL		
+format	varchar(10)	NO		NULL		
+created_by	int(11)	NO	MUL	NULL		
+created_at	datetime	NO		NULL		
+updated_at	datetime	YES		NULL		
+active	tinyint(1)	NO		1		
+
+
+somthing wrong in the fatshing employees pics

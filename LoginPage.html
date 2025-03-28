@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login | Attendance Management System</title>
+  <style>
+    /* CSS Variables for consistent theming */
+    :root {
+      --primary-color: #3498db;
+      --primary-dark: #2980b9;
+      --secondary-color: #2ecc71;
+      --secondary-dark: #27ae60;
+      --light-bg: #f5f7fa;
+      --dark-bg: #34495e;
+      --dark-text: #2c3e50;
+      --light-text: #ecf0f1;
+      --border-color: #bdc3c7;
+      --card-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: var(--light-bg);
+      color: var(--dark-text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 400px;
+      padding: 20px;
+    }
+
+    .logo-container {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      color: var(--primary-color);
+    }
+
+    .subtitle {
+      margin-top: 5px;
+      color: var(--dark-text);
+      opacity: 0.8;
+    }
+
+    .card {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 20px;
+      background-color: white;
+      border-bottom: 1px solid var(--border-color);
+      text-align: center;
+    }
+
+    .card-header h2 {
+      font-weight: 600;
+      color: var(--dark-text);
+    }
+
+    .card-body {
+      padding: 30px 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--dark-text);
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 14px;
+      transition: border 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    .btn:hover {
+      background-color: var(--primary-dark);
+    }
+
+    .form-footer {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .form-footer a {
+      color: var(--primary-color);
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .form-footer a:hover {
+      text-decoration: underline;
+    }
+
+    .remember-me {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .remember-me input {
+      margin-right: 8px;
+    }
+
+    .error-message {
+      color: #d9534f;
+      font-size: 14px;
+      margin-top: 10px;
+      text-align: center;
+      opacity: 1; /* Ensure it's visible */
+      transform: translateY(0);
+      transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+    }
+
+    .show-error {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 80% { transform: translateX(-5px); }
+      40%, 60% { transform: translateX(5px); }
+    }
+
+    .shake {
+      animation: shake 0.5s ease-in-out;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 480px) {
+      .login-container {
+        padding: 10px;
+      }
+      
+      .card-body {
+        padding: 20px 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo-container">
+      <div class="logo">Attendance Management System</div>
+      <div class="subtitle">Track attendance, manage leaves efficiently</div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h2>Welcome Back</h2>
+      </div>
+      <div class="card-body">
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="username">Employee ID or Username</label>
+            <input type="text" id="username" name="username" required autocomplete="username">
+          </div>
+          
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+          </div>
+          
+          <div class="remember-me">
+            <input type="checkbox" id="remember" name="remember">
+            <label for="remember">Remember me</label>
+          </div>
+          
+          <p id="error-message" class="error-message"></p>
+
+          <button type="submit" class="btn">Sign In</button>
+        </form>
+        
+        <div class="form-footer">
+          <a href="/forgot-password">Forgot your password?</a>
+          <br>
+          <a href="Registration.html">Not registered? Create an account</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async function(event) {
+      event.preventDefault(); // Prevent page reload
+    
+      const username = document.getElementById("username");
+      const password = document.getElementById("password");
+      const errorMessage = document.getElementById("error-message");
+    
+      // Reset error message visibility
+      errorMessage.textContent = "";
+      errorMessage.classList.remove("show-error", "shake");
+    
+      const formData = new FormData();
+      formData.append("username", username.value);
+      formData.append("password", password.value);
+    
+      try {
+        const response = await fetch("login.php", {
+          method: "POST",
+          body: formData
+        });
+    
+        const result = await response.json();
+    
+        if (result.error) {
+          console.log("Error received from server:", result.error); // Debugging line
+          errorMessage.textContent = result.error;
+          errorMessage.classList.add("show-error", "shake");
+    
+          setTimeout(() => errorMessage.classList.remove("shake"), 500);
+        } else if (result.success) {
+          window.location.href = result.redirect;
+        } else {
+          console.log("Unexpected response:", result); // Debugging
+        }
+      } catch (error) {
+        console.error("Fetch error:", error);
+        errorMessage.textContent = "An unexpected error occurred!";
+        errorMessage.classList.add("show-error", "shake");
+      }
+    });
+  </script>
+</body>
+</html>

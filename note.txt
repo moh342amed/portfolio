@@ -1,0 +1,268 @@
+login.php:
+<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+session_start();
+
+header('Content-Type: application/json');
+
+$servername = "localhost";
+$username = "root"; 
+$password = ""; 
+$dbname = "attendance_management";
+
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+if ($conn->connect_error) {
+    echo json_encode(['error' => 'Database connection failed!']);
+    exit;
+}
+
+$username = $_POST['username'];
+$password = $_POST['password'];
+
+if (empty($username) || empty($password)) {
+    echo json_encode(['error' => 'Both fields are required!']);
+    exit;
+}
+
+$sql = "SELECT id, username, name, email, role, password FROM users WHERE username = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $username);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows === 0) {
+    echo json_encode(['error' => 'Invalid username or password!']);
+    exit;
+}
+
+$user = $result->fetch_assoc();
+
+if (!password_verify($password, $user['password'])) {
+    echo json_encode(['error' => 'Invalid username or password!']);
+    exit;
+}
+
+// Prevent session fixation and clear old session data
+session_regenerate_id(true);
+session_unset();
+
+// Set session variables
+$_SESSION['user_id'] = $user['id'];
+$_SESSION['username'] = $user['username'];
+$_SESSION['role'] = $user['role']; 
+$_SESSION['name'] = $user['name'];
+
+// Determine redirect based on role
+$redirect_url = "";
+switch ($user['role']) {
+    case 'employee':
+        $redirect_url = "./Employee/EmployeeDashboard.php";
+        break;
+    case 'administration':
+        $redirect_url = "./Administration/EmployeeDirectoryPage.php";
+        break;
+    case 'president':
+        $redirect_url = "./President/President-Executive-Dashboard.php";
+        break;
+    default:
+        echo json_encode(['error' => 'Invalid user role!']);
+        exit;
+}
+
+// Send success response
+echo json_encode(['success' => true, 'redirect' => $redirect_url]);
+exit;
+?>
+
+
+register.php:
+<?php
+header('Content-Type: application/json');
+
+$servername = "localhost";
+$username = "root"; 
+$password = ""; 
+$dbname = "attendance_management";
+
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+if ($conn->connect_error) {
+    echo json_encode(['error' => 'Database connection failed!']);
+    exit;
+}
+
+$name = $_POST['name'];
+$username = $_POST['username'];
+$email = $_POST['email'];
+$password = $_POST['password'];
+$role = $_POST['role'];
+
+if (empty($name) || empty($username) || empty($email) || empty($password) || empty($role)) {
+    echo json_encode(['error' => 'All fields are required!']);
+    exit;
+}
+
+// Check if username or email already exists
+$sql = "SELECT * FROM users WHERE username = ? OR email = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("ss", $username, $email);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows > 0) {
+    echo json_encode(['error' => 'Username or email already exists!']);
+    exit;
+}
+
+$password = password_hash($password, PASSWORD_DEFAULT);
+$sql = "INSERT INTO users (name, username, email, password, role) VALUES (?, ?, ?, ?, ?)";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("sssss", $name, $username, $email, $password, $role);
+
+if ($stmt->execute()) {
+    echo json_encode(['success' => true, 'message' => 'Registration successful! Redirecting to login page...']);
+} else {
+    echo json_encode(['error' => 'Registration failed!']);
+}
+
+$stmt->close();
+$conn->close();
+?>
+
+
+Database:
+
+DESCRIBE attendance_modifications;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+modification_date	date	NO		NULL		
+modification_type	varchar(50)	NO		NULL		
+modification_time	time	YES		NULL		
+reason	text	NO		NULL		
+status	enum('pending','approved','rejected')	NO		pending		
+admin_comment	text	YES		NULL		
+created_at	datetime	NO		NULL		
+updated_at	datetime	YES		NULL		
+approved_by	int(11)	YES		NULL		
+
+DESCRIBE leaves;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+start_date	date	NO		NULL		
+end_date	date	NO		NULL		
+leave_type	varchar(50)	NO		NULL		
+reason	text	NO		NULL		
+status	enum('pending','approved','rejected')	NO		pending		
+admin_comment	text	YES		NULL		
+created_at	datetime	NO		NULL		
+updated_at	datetime	YES		NULL		
+
+DESCRIBE leave_requests;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+leave_type	varchar(50)	NO		NULL		
+start_date	date	NO		NULL		
+end_date	date	NO		NULL		
+days	int(11)	NO		NULL		
+reason	text	YES		NULL		
+status	varchar(20)	NO		pending		
+submitted_at	datetime	NO		current_timestamp()		
+attachment	varchar(255)	YES		NULL		
+approved_by	int(11)	YES		NULL		
+approved_at	datetime	YES		NULL		
+team_lead_approval	varchar(20)	YES		pending		
+department_head_approval	varchar(20)	YES		pending		
+admin_comment	text	YES		NULL		
+
+DESCRIBE notifications;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+title	varchar(255)	NO		NULL		
+message	text	NO		NULL		
+created_at	datetime	NO		NULL		
+read	tinyint(1)	NO		0		
+time_ago	varchar(50)	YES		NULL	VIRTUAL GENERATED	
+
+DESCRIBE penalties;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+penalty_type	varchar(50)	NO		NULL		
+incident_date	date	NO		NULL		
+issue_date	date	NO		NULL		
+severity	enum('low','medium','high')	NO		NULL		
+description	text	NO		NULL		
+penalty_action	varchar(50)	NO		NULL		
+status	enum('active','resolved','revoked')	NO		active		
+documents	varchar(255)	YES		NULL		
+notify_employee	tinyint(1)	NO		0		
+notify_manager	tinyint(1)	NO		0		
+created_by	int(11)	NO	MUL	NULL		
+resolved_by	int(11)	YES	MUL	NULL		
+resolved_date	date	YES		NULL		
+created_at	datetime	NO		current_timestamp()		
+updated_at	datetime	YES		NULL	on update current_timestamp()	
+
+DESCRIBE reports;
+id	int(11)	NO	PRI	NULL	auto_increment	
+title	varchar(255)	NO		NULL		
+department	varchar(255)	NO	MUL	NULL		
+generated_by	int(11)	NO	MUL	NULL		
+generated_date	datetime	NO		NULL		
+priority	enum('low','medium','high')	NO		medium		
+status	enum('pending','signed','archived')	NO	MUL	pending		
+signed_date	datetime	YES		NULL		
+signed_by	int(11)	YES	MUL	NULL		
+comments	text	YES		NULL		
+attachment	varchar(255)	YES		NULL		
+created_at	datetime	NO		current_timestamp()		
+updated_at	datetime	YES		NULL	on update current_timestamp()	
+
+DESCRIBE scheduled_reports;
+id	int(11)	NO	PRI	NULL	auto_increment	
+name	varchar(255)	NO		NULL		
+report_type	varchar(50)	NO		NULL		
+recipients	text	NO		NULL		
+schedule	varchar(20)	NO		NULL		
+last_run	datetime	YES		NULL		
+next_run	datetime	YES		NULL		
+format	varchar(10)	NO		NULL		
+created_by	int(11)	NO	MUL	NULL		
+created_at	datetime	NO		NULL		
+updated_at	datetime	YES		NULL		
+active	tinyint(1)	NO		1		
+
+DESCRIBE users;
+id	int(11)	NO	PRI	NULL	auto_increment	
+name	varchar(255)	NO		NULL		
+username	varchar(255)	NO	UNI	NULL		
+email	varchar(255)	NO	UNI	NULL		
+phone	varchar(20)	YES		NULL		
+password	varchar(255)	NO		NULL		
+role	varchar(50)	NO		NULL		
+address	text	YES		NULL		
+emergency_contact	text	YES		NULL		
+department	text	YES		NULL		
+manager	text	YES		NULL		
+join_date	date	YES		NULL		
+today_status	text	YES		NULL		
+present_this_month	int(11)	YES		NULL		
+leave_balance	int(11)	YES		NULL		
+late_arrivals	int(11)	YES		NULL		
+recent_attendance	text	YES		NULL		
+present_days	int(11)	YES		NULL		
+absent_days	int(11)	YES		NULL		
+annual_leave_balance	int(11)	YES		20		
+sick_leave_balance	int(11)	YES		10		
+personal_leave_balance	int(11)	YES		5		
+unpaid_leave_balance	int(11)	YES		365		
+profile_picture	varchar(255)	YES		default-profile.png		
+
+DESCRIBE users_attendance;
+id	int(11)	NO	PRI	NULL	auto_increment	
+user_id	int(11)	NO	MUL	NULL		
+clock_in	datetime	NO		NULL		
+clock_out	datetime	YES		NULL		
+
+
